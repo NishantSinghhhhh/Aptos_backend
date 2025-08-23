@@ -74,9 +74,9 @@ app.post("/stake", async (req, res) => {
         function: `${moduleAddress}::pull_quest_token::stake_pr`,
         // Corrected argument order: prId (U64), amount (U64), developerAddress (address)
         functionArguments: [
+          AccountAddress.from(developerAddress),
           BigInt(prId),
           BigInt(amount),
-          AccountAddress.from(developerAddress),
         ],
       },
     });
