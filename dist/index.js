@@ -53,7 +53,6 @@ app.get("/health", (req, res) => {
     });
     console.log('✅ Health check completed successfully');
 });
-// Routes
 app.post("/stake", async (req, res) => {
     const { prId, developerAddress, amount } = req.body;
     console.log('🎯 POST /stake - Staking request received');
@@ -62,12 +61,16 @@ app.post("/stake", async (req, res) => {
     console.log(`   💰 Amount: ${amount} tokens`);
     try {
         console.log('🔨 Building stake transaction...');
-        // Fixed argument order: prId (U64) first, then developerAddress, then amount
         const transaction = await aptos.transaction.build.simple({
             sender: serviceAccount.accountAddress,
             data: {
                 function: `${moduleAddress}::pull_quest_token::stake_pr`,
-                functionArguments: [BigInt(prId), ts_sdk_1.AccountAddress.from(developerAddress), BigInt(amount)],
+                // Corrected argument order: prId (U64), amount (U64), developerAddress (address)
+                functionArguments: [
+                    BigInt(prId),
+                    BigInt(amount),
+                    ts_sdk_1.AccountAddress.from(developerAddress),
+                ],
             },
         });
         console.log('✅ Transaction built successfully');

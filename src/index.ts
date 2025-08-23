@@ -57,34 +57,40 @@ app.get("/health", (req, res) => {
   console.log('✅ Health check completed successfully');
 });
 
-// Routes
 app.post("/stake", async (req, res) => {
   const { prId, developerAddress, amount } = req.body;
-  
+
   console.log('🎯 POST /stake - Staking request received');
   console.log(`   📊 PR ID: ${prId}`);
   console.log(`   👤 Developer: ${developerAddress}`);
   console.log(`   💰 Amount: ${amount} tokens`);
-  
+
   try {
     console.log('🔨 Building stake transaction...');
-    // Fixed argument order: prId (U64) first, then developerAddress, then amount
+
     const transaction = await aptos.transaction.build.simple({
       sender: serviceAccount.accountAddress,
       data: {
         function: `${moduleAddress}::pull_quest_token::stake_pr`,
-        functionArguments: [BigInt(prId), AccountAddress.from(developerAddress), BigInt(amount)],
+        // Corrected argument order: prId (U64), amount (U64), developerAddress (address)
+        functionArguments: [
+          BigInt(prId),
+          BigInt(amount),
+          AccountAddress.from(developerAddress),
+        ],
       },
     });
+
     console.log('✅ Transaction built successfully');
-    
+
     console.log('📝 Signing and submitting transaction...');
     const response = await aptos.signAndSubmitTransaction({
       signer: serviceAccount,
       transaction,
     });
+
     console.log(`🎉 Stake transaction successful! Hash: ${response.hash}`);
-    
+
     res.json({ success: true, transactionHash: response.hash });
   } catch (error: any) {
     console.error('❌ Stake transaction failed:', error.message);
@@ -92,6 +98,7 @@ app.post("/stake", async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 app.post("/merge", async (req, res) => {
   const { prId, developerAddress } = req.body;
