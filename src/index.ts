@@ -68,14 +68,18 @@ app.post("/stake", async (req, res) => {
   try {
     console.log('🔨 Building stake transaction...');
 
+    // The transaction payload for the simple API
     const transaction = await aptos.transaction.build.simple({
       sender: serviceAccount.accountAddress,
       data: {
         function: `${moduleAddress}::pull_quest_token::stake_pr`,
-        // Corrected argument order: prId (U64), amount (U64), developerAddress (address)
+        // The arguments for the function.
+        // The order has been corrected to match what the deployed contract expects,
+        // based on the error message "Type mismatch for argument 0, expected 'U64'".
+        // We now send the U64 `prId` first.
         functionArguments: [
-          AccountAddress.from(developerAddress),
           BigInt(prId),
+          AccountAddress.from(developerAddress),
           BigInt(amount),
         ],
       },
@@ -84,6 +88,7 @@ app.post("/stake", async (req, res) => {
     console.log('✅ Transaction built successfully');
 
     console.log('📝 Signing and submitting transaction...');
+    // Sign and submit the transaction to the blockchain.
     const response = await aptos.signAndSubmitTransaction({
       signer: serviceAccount,
       transaction,
@@ -93,12 +98,12 @@ app.post("/stake", async (req, res) => {
 
     res.json({ success: true, transactionHash: response.hash });
   } catch (error: any) {
+    // Log any errors that occur during the process.
     console.error('❌ Stake transaction failed:', error.message);
     console.error('📍 Error details:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
 
 app.post("/merge", async (req, res) => {
   const { prId, developerAddress } = req.body;
