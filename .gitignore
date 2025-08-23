@@ -1,2 +1,9 @@
+# Ignore aptos local directory
 .aptos/
+
+# Ignore build artifacts
 build/
+
+# Ignore node_modules dependencies
+node_modules/
+
