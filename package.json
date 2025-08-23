@@ -23,13 +23,12 @@
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "jwt-decode": "^3.1.2",
     "typescript": "^5.9.2"
   },
+  "resolutions": {
+  "jwt-decode": "2.2.0"
+},
   "devDependencies": {
     "ts-node-dev": "^2.0.0"
-  },
-  "overrides": {
-    "jwt-decode": "3.1.2"
   }
 }
