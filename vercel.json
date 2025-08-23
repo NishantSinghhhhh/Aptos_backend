@@ -11,9 +11,5 @@
       "src": "/(.*)",
       "dest": "/src/index.ts"
     }
-  ],
-  "env": {
-    "APTOS_SERVICE_ACCOUNT_PRIVATE_KEY": "@aptos_service_account_private_key",
-    "APTOS_MODULE_ADDRESS": "@aptos_module_address"
-  }
+  ]
 }
