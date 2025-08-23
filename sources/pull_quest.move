@@ -1,99 +1,125 @@
 module pull_quest::pull_quest_token {
     use std::signer;
     use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability};
+    use aptos_std::table::{Self, Table};
     use std::string;
 
-    // The custom token for staking
+    // --- STRUCTS ---
+
     struct PullQuestToken has key {}
 
-    // A struct to hold the capabilities, which must be stored on an account
     struct PullQuestCaps has key {
         mint_cap: MintCapability<PullQuestToken>,
         burn_cap: BurnCapability<PullQuestToken>,
     }
 
-    // A resource to hold the staked tokens for a specific pull request
-    struct PullRequestStake has key {
+    struct PullRequestStake has store {
         pr_id: u64,
         staked_amount: Coin<PullQuestToken>,
         developer: address,
     }
 
-    // Initialize the module and the custom token
+    struct StakeLedger has key {
+        stakes: Table<address, PullRequestStake>,
+    }
+
+    // --- ERRORS ---
+    const ESTAKE_ALREADY_EXISTS: u64 = 1;
+    const ESTAKE_NOT_FOUND: u64 = 2;
+    const EAMOUNT_TOO_HIGH: u64 = 3;
+
+    // --- ENTRY FUNCTIONS ---
+
     entry fun init_module(account: &signer) {
         let (burn_cap, freeze_cap, mint_cap) = coin::initialize<PullQuestToken>(
             account,
             string::utf8(b"Pull Quest Token"),
             string::utf8(b"PQT"),
-            8, // Decimals
-            false, // Don't allow freezing
+            8,
+            false,
         );
-
-        // Store the capabilities on the account that deploys the module
         move_to(account, PullQuestCaps { mint_cap, burn_cap });
-        // Destroy the freeze capability, not needed
         coin::destroy_freeze_cap(freeze_cap);
+
+        move_to(account, StakeLedger { stakes: table::new() });
     }
 
-    // Stake tokens for a pull request
-    entry fun stake_pr(creator: &signer, pr_id: u64, amount: u64) acquires PullQuestCaps {
-        if (!coin::is_account_registered<PullQuestToken>(signer::address_of(creator))) {
-            coin::register<PullQuestToken>(creator);
-        };
-
-        let service_address = @pull_quest;
+    entry fun stake_pr(creator: &signer, developer_addr: address, pr_id: u64, amount: u64) acquires PullQuestCaps, StakeLedger {
+        let service_address = signer::address_of(creator);
         let mint_cap = &borrow_global<PullQuestCaps>(service_address).mint_cap;
+        let ledger = borrow_global_mut<StakeLedger>(service_address);
 
-        // Mint tokens to the creator's account
+        assert!(!table::contains(&ledger.stakes, developer_addr), ESTAKE_ALREADY_EXISTS);
+
         let staked_coin = coin::mint(amount, mint_cap);
-        coin::deposit(signer::address_of(creator), staked_coin);
+        let new_stake = PullRequestStake { pr_id, staked_amount: staked_coin, developer: developer_addr };
 
-        // Withdraw and move into escrow
-        let staked_coin_from_creator = coin::withdraw<PullQuestToken>(creator, amount);
-
-        move_to(creator,
-            PullRequestStake {
-                pr_id,
-                staked_amount: staked_coin_from_creator,
-                developer: signer::address_of(creator),
-            }
-        );
+        table::add(&mut ledger.stakes, developer_addr, new_stake);
     }
 
-    // Reward the developer and release the stake if a PR is merged
-    entry fun merge_pr(_maintainer: &signer, _pr_id: u64, developer: address, bonus: u64) acquires PullRequestStake, PullQuestCaps {
-        let PullRequestStake { staked_amount: staked_coin, pr_id: _, developer: _ } = move_from<PullRequestStake>(developer);
+    entry fun merge_pr(maintainer: &signer, developer: address, bonus: u64) acquires PullQuestCaps, StakeLedger {
+        let service_address = signer::address_of(maintainer);
+        let caps = borrow_global<PullQuestCaps>(service_address);
+        let ledger = borrow_global_mut<StakeLedger>(service_address);
 
-        let staked_amount = coin::value(&staked_coin);
+        assert!(table::contains(&ledger.stakes, developer), ESTAKE_NOT_FOUND);
+        let stake = table::remove(&mut ledger.stakes, developer);
+        let PullRequestStake { staked_amount, .. } = stake;
 
-        let total_reward = staked_amount + bonus;
-        let mint_cap = &borrow_global<PullQuestCaps>(@pull_quest).mint_cap;
-        let reward_coin = coin::mint(total_reward, mint_cap);
+        let total_reward = coin::value(&staked_amount) + bonus;
+        coin::burn(staked_amount, &caps.burn_cap);
+        let reward_coin = coin::mint(total_reward, &caps.mint_cap);
+
         coin::deposit(developer, reward_coin);
-
-        let burn_cap = &borrow_global<PullQuestCaps>(@pull_quest).burn_cap;
-        coin::burn(staked_coin, burn_cap);
     }
 
-    // Deduct a portion of the stake if a PR is rejected
-    entry fun deduct_pr(_maintainer: &signer, _pr_id: u64, developer: address, deduction_amount: u64) acquires PullRequestStake, PullQuestCaps {
-        let PullRequestStake { staked_amount: staked_coin, pr_id: _, developer: _ } = move_from<PullRequestStake>(developer);
+    entry fun deduct_pr(maintainer: &signer, developer: address, deduction_amount: u64) acquires PullQuestCaps, StakeLedger {
+        let service_address = signer::address_of(maintainer);
+        let caps = borrow_global<PullQuestCaps>(service_address);
+        let ledger = borrow_global_mut<StakeLedger>(service_address);
 
-        let staked_amount = coin::value(&staked_coin);
-        let remaining_amount = staked_amount - deduction_amount;
+        assert!(table::contains(&ledger.stakes, developer), ESTAKE_NOT_FOUND);
+        let stake = table::remove(&mut ledger.stakes, developer);
+        let PullRequestStake { staked_amount, .. } = stake;
 
-        let mint_cap = &borrow_global<PullQuestCaps>(@pull_quest).mint_cap;
-        let remaining_coin = coin::mint(remaining_amount, mint_cap);
-        coin::deposit(developer, remaining_coin);
+        let staked_value = coin::value(&staked_amount);
+        assert!(staked_value >= deduction_amount, EAMOUNT_TOO_HIGH);
+        let remaining_amount = staked_value - deduction_amount;
+        coin::burn(staked_amount, &caps.burn_cap);
 
-        let burn_cap = &borrow_global<PullQuestCaps>(@pull_quest).burn_cap;
-        coin::burn(staked_coin, burn_cap);
+        if (remaining_amount > 0) {
+            let remaining_coin = coin::mint(remaining_amount, &caps.mint_cap);
+            coin::deposit(developer, remaining_coin);
+        }
     }
 
-    // Refund the entire stake if the PR is not reviewed on time
-    entry fun refund_pr(_maintainer: &signer, _pr_id: u64, developer: address) acquires PullRequestStake {
-        let PullRequestStake { staked_amount: staked_coin, pr_id: _, developer: _ } = move_from<PullRequestStake>(developer);
+    entry fun refund_pr(maintainer: &signer, developer: address) acquires StakeLedger {
+        let service_address = signer::address_of(maintainer);
+        let ledger = borrow_global_mut<StakeLedger>(service_address);
 
-        coin::deposit(developer, staked_coin);
+        assert!(table::contains(&ledger.stakes, developer), ESTAKE_NOT_FOUND);
+        let stake = table::remove(&mut ledger.stakes, developer);
+        let PullRequestStake { staked_amount, .. } = stake;
+
+        coin::deposit(developer, staked_amount);
+    }
+
+    // --- VIEW FUNCTION ---
+
+    // Read-only function to check a developer's stake
+    // ## This #[view] attribute is the final fix ##
+    #[view]
+    public fun get_stake_info(ledger_owner: address, developer: address): (bool, u64, u64) acquires StakeLedger {
+        if (!exists<StakeLedger>(ledger_owner)) {
+            return (false, 0, 0);
+        };
+        let ledger = borrow_global<StakeLedger>(ledger_owner);
+        if (table::contains(&ledger.stakes, developer)) {
+            let stake = table::borrow(&ledger.stakes, developer);
+            let amount = coin::value(&stake.staked_amount);
+            (true, stake.pr_id, amount)
+        } else {
+            (false, 0, 0)
+        }
     }
 }

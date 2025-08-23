@@ -10,7 +10,6 @@ dotenv_1.default.config();
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 console.log('🚀 Initializing PullQuest Aptos Backend...');
-// Load Aptos configuration and service account
 console.log('🔧 Configuring Aptos SDK...');
 const config = new ts_sdk_1.AptosConfig({ network: ts_sdk_1.Network.DEVNET });
 const aptos = new ts_sdk_1.Aptos(config);
@@ -35,7 +34,8 @@ app.get("/", (req, res) => {
             stake: "POST /stake - Stake tokens on a PR",
             merge: "POST /merge - Process PR merge with rewards",
             deduct: "POST /deduct - Deduct tokens for violations",
-            refund: "POST /refund - Refund staked tokens"
+            refund: "POST /refund - Refund staked tokens",
+            profile: "GET /profile/:developerAddress - Get developer stake info"
         },
         serviceAccount: serviceAccount.accountAddress.toString(),
         timestamp: new Date().toISOString()
@@ -62,11 +62,12 @@ app.post("/stake", async (req, res) => {
     console.log(`   💰 Amount: ${amount} tokens`);
     try {
         console.log('🔨 Building stake transaction...');
+        // Fixed argument order: prId (U64) first, then developerAddress, then amount
         const transaction = await aptos.transaction.build.simple({
             sender: serviceAccount.accountAddress,
             data: {
                 function: `${moduleAddress}::pull_quest_token::stake_pr`,
-                functionArguments: [ts_sdk_1.AccountAddress.from(developerAddress), BigInt(prId), BigInt(amount)],
+                functionArguments: [BigInt(prId), ts_sdk_1.AccountAddress.from(developerAddress), BigInt(amount)],
             },
         });
         console.log('✅ Transaction built successfully');
@@ -93,6 +94,7 @@ app.post("/merge", async (req, res) => {
     console.log(`   🎁 Bonus: ${bonus} tokens`);
     try {
         console.log('🔨 Building merge transaction...');
+        // Fixed argument order: prId (U64) first, then developerAddress, then bonus
         const transaction = await aptos.transaction.build.simple({
             sender: serviceAccount.accountAddress,
             data: {
@@ -123,6 +125,7 @@ app.post("/deduct", async (req, res) => {
     console.log(`   💸 Deduction: ${deductionAmount} tokens`);
     try {
         console.log('🔨 Building deduction transaction...');
+        // Fixed argument order: prId (U64) first, then developerAddress, then deductionAmount
         const transaction = await aptos.transaction.build.simple({
             sender: serviceAccount.accountAddress,
             data: {
@@ -152,6 +155,7 @@ app.post("/refund", async (req, res) => {
     console.log(`   👤 Developer: ${developerAddress}`);
     try {
         console.log('🔨 Building refund transaction...');
+        // Fixed argument order: prId (U64) first, then developerAddress
         const transaction = await aptos.transaction.build.simple({
             sender: serviceAccount.accountAddress,
             data: {
@@ -170,6 +174,48 @@ app.post("/refund", async (req, res) => {
     }
     catch (error) {
         console.error('❌ Refund transaction failed:', error.message);
+        console.error('📍 Error details:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+app.get("/profile/:developerAddress", async (req, res) => {
+    const { developerAddress } = req.params;
+    console.log('👤 GET /profile - Profile request received');
+    console.log(`   🔍 Developer: ${developerAddress}`);
+    try {
+        console.log('🔍 Fetching stake information...');
+        const payload = {
+            function: `${moduleAddress}::pull_quest_token::get_stake_info`,
+            functionArguments: [developerAddress],
+        };
+        const response = await aptos.view({ payload });
+        console.log('📊 Stake info retrieved:', response);
+        const [isStaked, prId, amount] = response;
+        if (isStaked && prId != null && amount != null) {
+            console.log('✅ Developer has active stake');
+            res.json({
+                success: true,
+                data: {
+                    isStaked: true,
+                    prId: prId.toString(),
+                    amount: amount.toString(),
+                },
+            });
+        }
+        else {
+            console.log('ℹ️ Developer has no active stake');
+            res.json({
+                success: true,
+                data: {
+                    isStaked: false,
+                    prId: null,
+                    amount: null,
+                },
+            });
+        }
+    }
+    catch (error) {
+        console.error('❌ Profile fetch failed:', error.message);
         console.error('📍 Error details:', error);
         res.status(500).json({ success: false, message: error.message });
     }
