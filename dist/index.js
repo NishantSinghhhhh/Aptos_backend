@@ -16,15 +16,42 @@ const privateKeyString = process.env.APTOS_SERVICE_ACCOUNT_PRIVATE_KEY;
 const privateKey = new ts_sdk_1.Ed25519PrivateKey(privateKeyString);
 const serviceAccount = ts_sdk_1.Account.fromPrivateKey({ privateKey });
 const moduleAddress = process.env.APTOS_MODULE_ADDRESS;
+app.get("/", (req, res) => {
+    res.json({
+        message: "🚀 PullQuest Aptos Backend API",
+        description: "Decentralized Pull Request Management System",
+        status: "✅ Server is running smoothly",
+        network: "Aptos Devnet",
+        version: "v1.0.0",
+        endpoints: {
+            stake: "POST /stake - Stake tokens on a PR",
+            merge: "POST /merge - Process PR merge with rewards",
+            deduct: "POST /deduct - Deduct tokens for violations",
+            refund: "POST /refund - Refund staked tokens"
+        },
+        serviceAccount: serviceAccount.accountAddress.toString(),
+        timestamp: new Date().toISOString()
+    });
+});
+// Health check route
+app.get("/health", (req, res) => {
+    res.json({
+        status: "healthy",
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        network: "Aptos Devnet",
+        serviceAccount: serviceAccount.accountAddress.toString()
+    });
+});
 // Routes
 app.post("/stake", async (req, res) => {
-    const { prId, amount } = req.body;
+    const { prId, developerAddress, amount } = req.body;
     try {
         const transaction = await aptos.transaction.build.simple({
             sender: serviceAccount.accountAddress,
             data: {
                 function: `${moduleAddress}::pull_quest_token::stake_pr`,
-                functionArguments: [prId, amount],
+                functionArguments: [ts_sdk_1.AccountAddress.from(developerAddress), BigInt(prId), BigInt(amount)],
             },
         });
         const response = await aptos.signAndSubmitTransaction({
@@ -45,7 +72,7 @@ app.post("/merge", async (req, res) => {
             sender: serviceAccount.accountAddress,
             data: {
                 function: `${moduleAddress}::pull_quest_token::merge_pr`,
-                functionArguments: [developerAddress, prId, bonus],
+                functionArguments: [BigInt(prId), ts_sdk_1.AccountAddress.from(developerAddress), BigInt(bonus)],
             },
         });
         const response = await aptos.signAndSubmitTransaction({
@@ -65,7 +92,7 @@ app.post("/deduct", async (req, res) => {
             sender: serviceAccount.accountAddress,
             data: {
                 function: `${moduleAddress}::pull_quest_token::deduct_pr`,
-                functionArguments: [developerAddress, prId, deductionAmount],
+                functionArguments: [BigInt(prId), ts_sdk_1.AccountAddress.from(developerAddress), BigInt(deductionAmount)],
             },
         });
         const response = await aptos.signAndSubmitTransaction({
@@ -85,7 +112,7 @@ app.post("/refund", async (req, res) => {
             sender: serviceAccount.accountAddress,
             data: {
                 function: `${moduleAddress}::pull_quest_token::refund_pr`,
-                functionArguments: [developerAddress, prId],
+                functionArguments: [BigInt(prId), ts_sdk_1.AccountAddress.from(developerAddress)],
             },
         });
         const response = await aptos.signAndSubmitTransaction({
