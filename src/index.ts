@@ -17,6 +17,36 @@ const serviceAccount = Account.fromPrivateKey({ privateKey });
 
 const moduleAddress = process.env.APTOS_MODULE_ADDRESS!;
 
+// Welcome route
+app.get("/", (req, res) => {
+  res.json({
+    message: "🚀 PullQuest Aptos Backend API",
+    description: "Decentralized Pull Request Management System",
+    status: "✅ Server is running smoothly",
+    network: "Aptos Devnet",
+    version: "v1.0.0",
+    endpoints: {
+      stake: "POST /stake - Stake tokens on a PR",
+      merge: "POST /merge - Process PR merge with rewards",
+      deduct: "POST /deduct - Deduct tokens for violations",
+      refund: "POST /refund - Refund staked tokens"
+    },
+    serviceAccount: serviceAccount.accountAddress.toString(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check route
+app.get("/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    network: "Aptos Devnet",
+    serviceAccount: serviceAccount.accountAddress.toString()
+  });
+});
+
 // Routes
 app.post("/stake", async (req, res) => {
   const { prId, amount } = req.body;
