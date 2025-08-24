@@ -1,6 +1,6 @@
 import express, { Application } from 'express';
 import dotenv from 'dotenv';
-import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey } from "@aptos-labs/ts-sdk";
+import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey, AccountAddress } from "@aptos-labs/ts-sdk";
 
 dotenv.config();
 
@@ -17,7 +17,6 @@ const serviceAccount = Account.fromPrivateKey({ privateKey });
 
 const moduleAddress = process.env.APTOS_MODULE_ADDRESS!;
 
-// Welcome route
 app.get("/", (req, res) => {
   res.json({
     message: "🚀 PullQuest Aptos Backend API",
@@ -49,13 +48,13 @@ app.get("/health", (req, res) => {
 
 // Routes
 app.post("/stake", async (req, res) => {
-  const { prId, amount } = req.body;
+  const { prId, developerAddress, amount } = req.body;
   try {
     const transaction = await aptos.transaction.build.simple({
       sender: serviceAccount.accountAddress,
       data: {
         function: `${moduleAddress}::pull_quest_token::stake_pr`,
-        functionArguments: [prId, amount],
+        functionArguments: [AccountAddress.from(developerAddress), BigInt(prId), BigInt(amount)],
       },
     });
     const response = await aptos.signAndSubmitTransaction({
@@ -76,7 +75,7 @@ app.post("/merge", async (req, res) => {
       sender: serviceAccount.accountAddress,
       data: {
         function: `${moduleAddress}::pull_quest_token::merge_pr`,
-        functionArguments: [developerAddress, prId, bonus],
+        functionArguments: [BigInt(prId), AccountAddress.from(developerAddress), BigInt(bonus)],
       },
     });
     const response = await aptos.signAndSubmitTransaction({
@@ -96,7 +95,7 @@ app.post("/deduct", async (req, res) => {
       sender: serviceAccount.accountAddress,
       data: {
         function: `${moduleAddress}::pull_quest_token::deduct_pr`,
-        functionArguments: [developerAddress, prId, deductionAmount],
+        functionArguments: [BigInt(prId), AccountAddress.from(developerAddress), BigInt(deductionAmount)],
       },
     });
     const response = await aptos.signAndSubmitTransaction({
@@ -116,7 +115,7 @@ app.post("/refund", async (req, res) => {
       sender: serviceAccount.accountAddress,
       data: {
         function: `${moduleAddress}::pull_quest_token::refund_pr`,
-        functionArguments: [developerAddress, prId],
+        functionArguments: [BigInt(prId), AccountAddress.from(developerAddress)],
       },
     });
     const response = await aptos.signAndSubmitTransaction({
